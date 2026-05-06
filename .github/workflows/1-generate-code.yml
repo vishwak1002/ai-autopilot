@@ -1,7 +1,9 @@
 name: 🤖 1 — Generate Code
 
 on:
-  workflow_dispatch:         # Triggered by routine or manually
+  schedule:
+    - cron: "0 */4 * * *"    # Every 4 hours
+  workflow_dispatch:         # Manual trigger
 
 permissions:
   contents: write
@@ -67,8 +69,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'claude-opus-4-5' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openrouter' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'anthropic/claude-sonnet-4-5-20250514' }}
           TARGET_REPO_PATH: /tmp/target-repo
         run: python scripts/generate.py
 

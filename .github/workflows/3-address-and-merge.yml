@@ -60,8 +60,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'claude-opus-4-5' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openrouter' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'anthropic/claude-sonnet-4-5-20250514' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           TARGET_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
