@@ -33,8 +33,19 @@ def load_prompt(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def get_ai_client():
-    provider = os.environ.get("AI_PROVIDER", "anthropic").lower()
+    provider = os.environ.get("AI_PROVIDER", "openrouter").lower()
     api_key = os.environ.get("AI_API_KEY", "")
+
+    if provider == "openrouter":
+        import openai
+        return openai.OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": os.environ.get("OPENROUTER_SITE_URL", "https://github.com/vishwak1002/ai-autopilot"),
+                "X-Title": os.environ.get("OPENROUTER_APP_NAME", "ai-autopilot"),
+            },
+        ), provider
 
     if provider == "anthropic":
         import anthropic
@@ -44,13 +55,13 @@ def get_ai_client():
         import openai
         return openai.OpenAI(api_key=api_key), provider
 
-    raise ValueError(f"Unsupported AI_PROVIDER: {provider}. Set to 'anthropic' or 'openai'.")
+    raise ValueError(f"Unsupported AI_PROVIDER: {provider}. Set to 'openrouter', 'anthropic', or 'openai'.")
 
 
 def call_ai(prompt: str, system_prompt: str = "") -> str:
     """Call the configured AI provider and return the response text."""
     client, provider = get_ai_client()
-    model = os.environ.get("AI_MODEL", "claude-opus-4-5")
+    model = os.environ.get("AI_MODEL", "anthropic/claude-opus-4-5")
 
     if provider == "anthropic":
         messages = [{"role": "user", "content": prompt}]
@@ -60,12 +71,13 @@ def call_ai(prompt: str, system_prompt: str = "") -> str:
         response = client.messages.create(**kwargs)
         return response.content[0].text
 
-    if provider == "openai":
+    # openrouter and openai both use the OpenAI SDK format
+    if provider in ("openrouter", "openai"):
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        response = client.chat.completions.create(model=model, messages=messages)
+        response = client.chat.completions.create(model=model, messages=messages, max_tokens=8096)
         return response.choices[0].message.content
 
     raise ValueError(f"Unknown provider: {provider}")
