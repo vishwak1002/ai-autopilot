@@ -1,0 +1,47 @@
+name: 🔍 2 — Review PR
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Only review PRs created by the autopilot
+    if: contains(github.head_ref, 'ai-gen/')
+    steps:
+      - name: Checkout ai-autopilot (engine)
+        uses: actions/checkout@v4
+        with:
+          repository: vishwak1002/ai-autopilot
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run AI code review
+        id: review
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'claude-opus-4-5' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TARGET_REPO: ${{ github.repository }}
+        run: python scripts/review.py
+
+      - name: Summary
+        run: |
+          echo "### 🔍 Review Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Score:** ${{ steps.review.outputs.review_score }}/10" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ready to merge:** ${{ steps.review.outputs.ready_to_merge }}" >> $GITHUB_STEP_SUMMARY

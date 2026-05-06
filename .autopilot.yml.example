@@ -1,0 +1,8 @@
+# .autopilot.yml — Add this file to each target repo and customise it.
+# The AI uses these settings as context when generating code.
+
+language: python          # Code language: python | javascript | typescript | go | etc.
+style: functional         # Code style: functional | OOP | mixed
+domain: general           # Domain hint: ai-apps | finance | fitness | voice | ios | etc.
+target_branch: main       # Branch to merge generated PRs into
+test_framework: pytest    # Test framework: pytest | unittest | jest | etc.

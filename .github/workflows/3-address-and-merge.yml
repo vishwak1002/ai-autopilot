@@ -1,0 +1,100 @@
+name: 🔧 3 — Address & Merge
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  address-and-merge:
+    runs-on: ubuntu-latest
+    # Only handle autopilot PRs
+    if: contains(github.event.pull_request.head.ref, 'ai-gen/')
+    steps:
+      - name: Checkout ai-autopilot (engine)
+        uses: actions/checkout@v4
+        with:
+          repository: vishwak1002/ai-autopilot
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Extract review score from PR comment
+        id: score
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TARGET_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          # Extract score from hidden tag in PR comments
+          SCORE=$(gh pr view "$PR_NUMBER" \
+            --repo "$TARGET_REPO" \
+            --json comments \
+            --jq '[.comments[].body | capture("<!-- autopilot_score:(?P<s>[0-9]+) -->") | .s] | last // "0"')
+
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "Extracted score: $SCORE/10"
+
+      - name: Merge if score >= 8
+        if: ${{ fromJSON(steps.score.outputs.score) >= 8 }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TARGET_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REVIEW_SCORE: ${{ steps.score.outputs.score }}
+        run: |
+          echo "✅ Score $REVIEW_SCORE >= 8 — merging"
+          python scripts/merge.py
+
+      - name: Write to FEEDBACK.md and close PR if score < 8
+        if: ${{ fromJSON(steps.score.outputs.score) < 8 }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'anthropic' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'claude-opus-4-5' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TARGET_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          echo "⚠️ Score ${{ steps.score.outputs.score }} < 8 — writing to FEEDBACK.md"
+
+          # Clone target repo to write FEEDBACK.md
+          REPO_DIR="/tmp/target-feedback"
+          gh repo clone "$TARGET_REPO" "$REPO_DIR" -- --depth=1
+
+          TARGET_REPO_PATH="$REPO_DIR" python scripts/address.py
+
+          # Commit and push FEEDBACK.md to target repo
+          cd "$REPO_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet FEEDBACK.md 2>/dev/null || [ ! -f FEEDBACK.md ]; then
+            git add FEEDBACK.md
+          else
+            git add FEEDBACK.md
+          fi
+
+          git diff --staged --quiet || git commit -m "🔄 Autopilot: Add refined prompt to FEEDBACK.md (PR #$PR_NUMBER, score: ${{ steps.score.outputs.score }}/10)"
+          git push origin main || echo "Nothing to push"
+
+      - name: Summary
+        run: |
+          SCORE="${{ steps.score.outputs.score }}"
+          echo "### 🔧 Address & Merge Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Score:** $SCORE/10" >> $GITHUB_STEP_SUMMARY
+          if [ "$SCORE" -ge 8 ]; then
+            echo "- **Action:** ✅ Merged to main" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Action:** 🔄 Refined prompt written to FEEDBACK.md, PR closed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Next:** Workflow 1 will pick up the refined prompt in the next cycle" >> $GITHUB_STEP_SUMMARY
+          fi
