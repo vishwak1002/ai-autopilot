@@ -70,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openrouter' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'anthropic/claude-sonnet-4-5-20250514' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'tencent/hy3-preview:free' }}
           TARGET_REPO_PATH: /tmp/target-repo
         run: python scripts/generate.py
 
