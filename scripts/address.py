@@ -1,26 +1,40 @@
 """
-address.py — Reads review issues from a PR, writes refined prompt to FEEDBACK.md,
-             then closes the PR.
+address.py — Reads CodeRabbit's review, writes refined prompt to FEEDBACK.md, closes PR.
 
-Usage (called by Workflow 3 when score < 8):
+Usage (called by Workflow 3 when CodeRabbit requests changes):
   PR_NUMBER=42 TARGET_REPO=vishwak1002/my-ai-apps TARGET_REPO_PATH=./cloned python scripts/address.py
 """
 
 import os
 import sys
+import json
 import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import call_ai, gh, write_feedback, set_output
+from utils import gh, write_feedback, set_output
 
 
-def get_pr_details(pr_number: str, repo: str) -> dict:
-    """Fetch PR body and comments."""
-    import json
+def get_coderabbit_review(pr_number: str, repo: str) -> dict:
+    """Fetch the latest CodeRabbit review from the PR."""
+    output = gh("pr", "view", pr_number, "--repo", repo,
+                "--json", "body,reviews,title,headRefName")
+    data = json.loads(output)
 
-    output = gh("pr", "view", pr_number, "--repo", repo, "--json", "body,comments,title")
-    return json.loads(output)
+    # Find CodeRabbit's review (submitted as a PR review, not a comment)
+    reviews = data.get("reviews", [])
+    coderabbit_reviews = [
+        r for r in reviews
+        if r.get("author", {}).get("login", "").lower() in ("coderabbitai[bot]", "coderabbitai")
+    ]
+
+    latest_review = coderabbit_reviews[-1] if coderabbit_reviews else {}
+    return {
+        "state": latest_review.get("state", "COMMENTED"),
+        "body": latest_review.get("body", ""),
+        "pr_title": data.get("title", ""),
+        "branch": data.get("headRefName", ""),
+    }
 
 
 def extract_original_prompt(pr_body: str) -> str:
@@ -31,43 +45,54 @@ def extract_original_prompt(pr_body: str) -> str:
     return "Unknown prompt"
 
 
-def extract_score_and_issues(comments: list) -> tuple[int, str]:
-    """
-    Parse the AI review comment to get score and issues summary.
-    Returns (score, issues_summary).
-    """
-    for comment in reversed(comments):
-        body = comment.get("body", "")
-        if "<!-- autopilot_score:" in body:
-            # Extract score
-            score_match = re.search(r"<!-- autopilot_score:(\d+) -->", body)
-            score = int(score_match.group(1)) if score_match else 0
+def extract_issues_from_review(review_body: str) -> str:
+    """Extract key issues from CodeRabbit's review body."""
+    if not review_body:
+        return "code quality issues flagged by CodeRabbit"
 
-            # Extract issues
-            issues = re.findall(
-                r"(?:🔴|🟡|🟢)\s+\*\*(?:HIGH|MEDIUM|LOW)\*\*:\s+(.+)",
-                body
-            )
-            issues_summary = "; ".join(issues[:3]) if issues else "code quality below threshold"
+    # CodeRabbit structures reviews with sections — grab the actionable parts
+    issues = []
 
-            return score, issues_summary
+    # Look for "Issues", "Problems", "Suggestions", "Changes requested" sections
+    patterns = [
+        r"(?:##?\s*(?:Issues?|Problems?|Changes? [Rr]equested|Actionable [Cc]omments?))(.*?)(?=##|\Z)",
+        r"(?:❌|⚠️|🔴|🟡)\s*(.+)",
+        r"\*\*(?:Issue|Problem|Error|Bug|Fix)\*\*[:\s]+(.+)",
+    ]
 
-    return 0, "review score not found"
+    for pattern in patterns:
+        matches = re.findall(pattern, review_body, re.DOTALL)
+        for match in matches:
+            clean = re.sub(r'\s+', ' ', match.strip())[:200]
+            if clean:
+                issues.append(clean)
+
+    if issues:
+        return "; ".join(issues[:3])
+
+    # Fallback — first 300 chars of review body as context
+    clean_body = re.sub(r'\s+', ' ', review_body.strip())
+    return clean_body[:300]
 
 
-def close_pr_with_comment(pr_number: str, repo: str, score: int) -> None:
-    """Close PR with explanation and feedback link."""
+def get_pr_body(pr_number: str, repo: str) -> str:
+    """Get the PR description body."""
+    output = gh("pr", "view", pr_number, "--repo", repo, "--json", "body")
+    return json.loads(output).get("body", "")
+
+
+def close_pr_with_comment(pr_number: str, repo: str) -> None:
+    """Close PR with explanation pointing to FEEDBACK.md."""
     comment = (
-        f"## 🔄 Autopilot: Queued for Improvement\n\n"
-        f"Score **{score}/10** is below the merge threshold of **8/10**.\n\n"
-        f"The issues have been extracted and a refined prompt has been written to "
-        f"`FEEDBACK.md` in this repo. The next Autopilot cycle will pick it up and "
-        f"generate an improved version.\n\n"
-        f"_No action needed — this will be retried automatically._"
+        "## 🔄 Autopilot: Queued for Improvement\n\n"
+        "CodeRabbit has requested changes on this PR.\n\n"
+        "The feedback has been extracted and a refined prompt written to `FEEDBACK.md`. "
+        "The next Autopilot cycle will pick it up and generate an improved version.\n\n"
+        "_No action needed — this will be retried automatically._"
     )
     gh("pr", "comment", pr_number, "--repo", repo, "--body", comment)
     gh("pr", "close", pr_number, "--repo", repo)
-    print(f"Closed PR #{pr_number} with feedback comment.")
+    print(f"Closed PR #{pr_number} — refined prompt written to FEEDBACK.md.")
 
 
 if __name__ == "__main__":
@@ -75,15 +100,17 @@ if __name__ == "__main__":
     repo = os.environ["TARGET_REPO"]
     repo_path = os.environ.get("TARGET_REPO_PATH", ".")
 
-    pr = get_pr_details(pr_number, repo)
-    original_prompt = extract_original_prompt(pr.get("body", ""))
-    score, issues_summary = extract_score_and_issues(pr.get("comments", []))
+    review = get_coderabbit_review(pr_number, repo)
+    pr_body = get_pr_body(pr_number, repo)
 
-    print(f"PR #{pr_number} | Score: {score}/10 | Issues: {issues_summary}")
+    original_prompt = extract_original_prompt(pr_body)
+    issues_summary = extract_issues_from_review(review["body"])
 
-    write_feedback(repo_path, original_prompt, score, issues_summary)
-    close_pr_with_comment(pr_number, repo, score)
+    print(f"PR #{pr_number} | CodeRabbit state: {review['state']}")
+    print(f"Issues: {issues_summary[:100]}")
+
+    write_feedback(repo_path, original_prompt, 0, issues_summary)
+    close_pr_with_comment(pr_number, repo)
 
     set_output("feedback_written", "true")
     set_output("refined_prompt", f"[Retry] {original_prompt[:100]}")
-    set_output("score", str(score))
