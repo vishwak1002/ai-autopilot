@@ -21,26 +21,28 @@ Always include proper error handling, docstrings, and unit tests.
 Respond ONLY with valid JSON — no markdown fences, no extra text."""
 
 
-def extract_prompts_from_readme(repo_path: str) -> list[str]:
-    """Extract prompts from ## 🤖 Prompts section in README.md."""
-    readme = Path(repo_path) / "README.md"
-    if not readme.exists():
-        return []
+def extract_prompts_from_file(repo_path: str) -> list[str]:
+    """
+    Read prompts from PROMPTS.md — one prompt per line starting with - or *.
+    This is the dedicated prompts file, separate from README.md.
+    """
+    prompts_file = Path(repo_path) / "PROMPTS.md"
+    if not prompts_file.exists():
+        raise FileNotFoundError(
+            f"PROMPTS.md not found in {repo_path}. "
+            "Create a PROMPTS.md file with prompts as bullet points."
+        )
 
-    content = readme.read_text()
-    section = re.search(r"## 🤖 Prompts(.*?)(?=##|\Z)", content, re.DOTALL)
-    if not section:
-        return []
-
-    prompts = re.findall(r"^[-*]\s+(.+)$", section.group(1), re.MULTILINE)
-    return [p.strip() for p in prompts if p.strip()]
+    content = prompts_file.read_text()
+    prompts = re.findall(r"^[-*]\s+(.+)$", content, re.MULTILINE)
+    return [p.strip() for p in prompts if p.strip() and not p.startswith("#")]
 
 
 def pick_prompt(repo_path: str) -> tuple[str, bool]:
     """
     Pick a prompt using priority queue logic:
     1. FEEDBACK.md first (refined/retry prompts)
-    2. Fallback to README.md prompts
+    2. Fallback to PROMPTS.md
 
     Returns (prompt, is_retry)
     """
@@ -51,13 +53,13 @@ def pick_prompt(repo_path: str) -> tuple[str, bool]:
         print(f"Using FEEDBACK.md prompt (retry): {prompt[:80]}")
         return prompt, True
 
-    readme_prompts = extract_prompts_from_readme(repo_path)
-    if not readme_prompts:
-        raise ValueError("No prompts found in FEEDBACK.md or README.md ## 🤖 Prompts section")
+    prompts = extract_prompts_from_file(repo_path)
+    if not prompts:
+        raise ValueError("No prompts found in FEEDBACK.md or PROMPTS.md")
 
     import random
-    prompt = random.choice(readme_prompts)
-    print(f"Using README.md prompt (fresh): {prompt[:80]}")
+    prompt = random.choice(prompts)
+    print(f"Using PROMPTS.md prompt (fresh): {prompt[:80]}")
     return prompt, False
 
 
