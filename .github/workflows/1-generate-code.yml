@@ -1,9 +1,7 @@
 name: 🤖 1 — Generate Code
 
 on:
-  schedule:
-    - cron: "0 */4 * * *"   # Every 4 hours
-  workflow_dispatch:         # Manual trigger
+  workflow_dispatch:         # Triggered by routine or manually
 
 permissions:
   contents: write
