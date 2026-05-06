@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openrouter' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'anthropic/claude-sonnet-4-5-20250514' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'tencent/hy3-preview:free' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           TARGET_REPO: ${{ github.repository }}
         run: python scripts/review.py
