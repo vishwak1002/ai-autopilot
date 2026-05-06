@@ -11,6 +11,24 @@ import yaml
 
 
 # ---------------------------------------------------------------------------
+# Prompt loader — reads from prompts/ directory, not hardcoded in scripts
+# ---------------------------------------------------------------------------
+
+PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+
+
+def load_prompt(name: str) -> str:
+    """
+    Load a prompt template from the prompts/ directory.
+    e.g. load_prompt("generate_system") reads prompts/generate_system.txt
+    """
+    prompt_file = PROMPTS_DIR / f"{name}.txt"
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
+    return prompt_file.read_text().strip()
+
+
+# ---------------------------------------------------------------------------
 # AI Client (placeholder — swap AI_PROVIDER to change provider)
 # ---------------------------------------------------------------------------
 

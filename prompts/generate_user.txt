@@ -1,0 +1,26 @@
+Generate code for this feature request:
+
+PROMPT: {prompt}
+{retry_context}
+
+CONFIG:
+- Language: {language}
+- Style: {style}
+- Domain: {domain}
+- Test framework: {test_framework}
+
+Respond with this exact JSON structure:
+{
+  "feature_name": "snake_case_name_max_5_words",
+  "description": "One sentence description",
+  "files": [
+    {
+      "path": "generated/<feature_name>/main.py",
+      "content": "# full file content here"
+    },
+    {
+      "path": "generated/<feature_name>/test_main.py",
+      "content": "# full test file content here"
+    }
+  ]
+}

@@ -13,12 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import call_ai, read_feedback, consume_feedback, load_autopilot_config, set_output
-
-
-SYSTEM_PROMPT = """You are an expert software developer. Generate clean, production-ready code.
-Always include proper error handling, docstrings, and unit tests.
-Respond ONLY with valid JSON — no markdown fences, no extra text."""
+from utils import call_ai, load_prompt, read_feedback, consume_feedback, load_autopilot_config, set_output
 
 
 def extract_prompts_from_file(repo_path: str) -> list[str]:
@@ -73,34 +68,16 @@ def generate_code(prompt: str, config: dict, is_retry: bool) -> dict:
         retry_context = f"\n\nIMPORTANT: This is a retry. Previous attempt failed. Required fixes:\n{fixes}"
         prompt = original
 
-    user_prompt = f"""Generate code for this feature request:
+    user_prompt = load_prompt("generate_user").format(
+        prompt=prompt,
+        retry_context=retry_context,
+        language=config["language"],
+        style=config["style"],
+        domain=config["domain"],
+        test_framework=config["test_framework"],
+    )
 
-PROMPT: {prompt}
-{retry_context}
-
-CONFIG:
-- Language: {config['language']}
-- Style: {config['style']}
-- Domain: {config['domain']}
-- Test framework: {config['test_framework']}
-
-Respond with this exact JSON structure:
-{{
-  "feature_name": "snake_case_name_max_5_words",
-  "description": "One sentence description",
-  "files": [
-    {{
-      "path": "generated/<feature_name>/main.py",
-      "content": "# full file content here"
-    }},
-    {{
-      "path": "generated/<feature_name>/test_main.py",
-      "content": "# full test file content here"
-    }}
-  ]
-}}"""
-
-    response = call_ai(user_prompt, SYSTEM_PROMPT)
+    response = call_ai(user_prompt, load_prompt("generate_system"))
 
     # Extract JSON robustly
     json_match = re.search(r'\{.*\}', response, re.DOTALL)

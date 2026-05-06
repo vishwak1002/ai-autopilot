@@ -12,12 +12,7 @@ import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import call_ai, gh, set_output
-
-
-SYSTEM_PROMPT = """You are a senior code reviewer. Review code diffs thoroughly and objectively.
-Be constructive but strict. Score fairly — only give 8+ to genuinely solid code.
-Respond ONLY with valid JSON — no markdown fences, no extra text."""
+from utils import call_ai, load_prompt, gh, set_output
 
 
 def get_pr_diff(pr_number: str, repo: str) -> str:
@@ -30,26 +25,8 @@ def get_pr_diff(pr_number: str, repo: str) -> str:
 
 def review_diff(diff: str) -> dict:
     """Send diff to AI for review. Returns structured review dict."""
-    prompt = f"""Review this pull request diff:
-
-{diff[:12000]}
-
-Return this exact JSON:
-{{
-  "score": <integer 1-10>,
-  "summary": "2-3 sentence overall assessment",
-  "issues": [
-    {{
-      "severity": "high|medium|low",
-      "description": "What is wrong",
-      "suggestion": "How to fix it"
-    }}
-  ],
-  "positive_aspects": ["What was done well"],
-  "ready_to_merge": <true if score >= 8, else false>
-}}"""
-
-    response = call_ai(prompt, SYSTEM_PROMPT)
+    prompt = load_prompt("review_user").format(diff=diff[:12000])
+    response = call_ai(prompt, load_prompt("review_system"))
 
     json_match = re.search(r'\{.*\}', response, re.DOTALL)
     if not json_match:

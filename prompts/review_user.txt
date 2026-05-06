@@ -1,0 +1,18 @@
+Review this pull request diff:
+
+{diff}
+
+Return this exact JSON:
+{
+  "score": <integer 1-10>,
+  "summary": "2-3 sentence overall assessment",
+  "issues": [
+    {
+      "severity": "high|medium|low",
+      "description": "What is wrong",
+      "suggestion": "How to fix it"
+    }
+  ],
+  "positive_aspects": ["What was done well"],
+  "ready_to_merge": <true if score >= 8, else false>
+}
